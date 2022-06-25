@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"name": "Aquaponia_iot",
+			"path": "."
+		},
+		{
+			"path": "D:\\DOCUMENTOS\\PROJETOS\\AQUAPONIA\\web-app\\site"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "teste"
+	}
+}

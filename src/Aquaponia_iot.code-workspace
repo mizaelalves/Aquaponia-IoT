@@ -1,0 +1,15 @@
+{
+  "folders": [
+	{
+		"name": "Aquaponia_iot",
+		"path": ".."
+	}
+],
+  "settings": {
+    "files.associations": {
+      "*.html": "html",
+      "*.js": "javascript",
+      "*.test": "cpp"
+    }
+  }
+}
