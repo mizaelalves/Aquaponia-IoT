@@ -28,8 +28,6 @@ FirebaseConfig config;
 DHT dht(23, DHT22);
 WiFiMulti wifiMulti;
 
-
-
 unsigned long sendDataPrevMillis = 0;
 int count1 = 0;
 int count2 = 0;
@@ -40,20 +38,31 @@ bool signupOK = false;
 int solenoide = 23;
 float temperatura;
 float umidade;
+bool boolValue;
+
 
 void initWifi()
 {
-  /*
+
   Serial.print("Connecting to Wi-Fi");
   while (WiFi.status() != WL_CONNECTED)
   {
-    Serial.print(".");
-    delay(300);
+     //Se o LED n esta conectado, pisca a cada 0.5 seg
+    digitalWrite(2, HIGH);
+    delay(500);
+    digitalWrite(2, LOW);
+    delay(500);
   }
-  */
+
  if(wifiMulti.run() == WL_CONNECTED) {
         Serial.println(WiFi.SSID());
-    }
+        //Se o LED esta conectado, pisca a cada 2 seg
+         digitalWrite(2, HIGH);
+         delay(2000);
+         digitalWrite(2, LOW);
+         delay(2000);
+  }
+
   Serial.println();
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
@@ -130,15 +139,15 @@ void setDataFirebase()
 
 void getDataFirebase()
 {
-  if (Firebase.RTDB.getInt(&fbdo, "/teste/led/ledValue"))
+  if (Firebase.RTDB.getBool(&fbdo, "/teste/led/ledValue"))
   {
-    if (fbdo.dataType() == "int")
+    if (fbdo.dataType() == "bool")
     {
-      intValue = fbdo.intData();
+      boolValue = fbdo.boolData();
 
-      if (intValue == 1)
+      if (boolValue == 1)
       {
-        Serial.println(intValue);
+        Serial.println(boolValue);
         digitalWrite(2, HIGH);
       }
       else
@@ -151,18 +160,39 @@ void getDataFirebase()
       Serial.println(fbdo.errorReason());
     }
   }
-  if (Firebase.RTDB.getInt(&fbdo, "/motores/solenoide/1"))
+  if (Firebase.RTDB.getBool(&fbdo, "/motores/solenoide/1"))
   {
-    if (fbdo.dataType() == "int")
+    if (fbdo.dataType() == "bool")
     {
-      intValue = fbdo.intData();
-      Serial.println(intValue);
+      boolValue = fbdo.boolData();
+      Serial.println(boolValue);
     }
     else
     {
       Serial.println("TESTE" + fbdo.errorReason());
     }
   }
+}
+int motor_pin1 = 32;
+int motor_pin2 = 33;
+
+void motor(){
+  //Gira o Motor A no sentido horario
+ digitalWrite(motor_pin1, HIGH);
+ digitalWrite(motor_pin2, LOW);
+ delay(3000);
+ //Para o motor A
+ digitalWrite(motor_pin1, HIGH);
+ digitalWrite(motor_pin2, HIGH);
+ delay(3000);
+ //Gira o Motor A no sentido anti-horario
+ digitalWrite(motor_pin1, LOW);
+ digitalWrite(motor_pin2, HIGH);
+ delay(3000);
+ //Para o motor A
+ digitalWrite(motor_pin1, HIGH);
+ digitalWrite(motor_pin2, HIGH);
+ delay(3000);
 }
 
 void setup()
@@ -175,11 +205,14 @@ void setup()
   //WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   pinMode(solenoide, OUTPUT);
   pinMode(2, OUTPUT);
+  pinMode(motor_pin1, OUTPUT);
+  pinMode(motor_pin2, OUTPUT);
   Serial.begin(9600);
   dht.begin();
   initWifi();
   initFirebase();
 }
+
 
 void loop()
 {
@@ -190,4 +223,5 @@ void loop()
     setDataFirebase();
     getDataFirebase();
   }
+  motor();
 }
