@@ -5,10 +5,11 @@
 			"path": "."
 		},
 		{
-			"path": "D:\\DOCUMENTOS\\PROJETOS\\AQUAPONIA\\web-app\\site"
+			"path": "../Dashboard"
 		}
 	],
 	"settings": {
-		"liveServer.settings.multiRootWorkspaceName": "teste"
+		"liveServer.settings.multiRootWorkspaceName": "Dashboard",
+		"nuxt.isNuxtApp": false
 	}
 }

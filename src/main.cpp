@@ -4,14 +4,17 @@
 #endif
 #include <Firebase_ESP_Client.h>
 #include "DHT.h"
-#include <WiFi.h>
-#include <WiFiMulti.h>
-
+//#include <WiFi.h>
+//#include <WiFiMulti.h>
+//#include <initWiFi.h>
 // Provide the token generation process info.
 #include "addons/TokenHelper.h"
 // Provide the RTDB payload printing info and other helper functions.
 #include "addons/RTDBHelper.h"
+
 #define FIREBASE_USE_PSRAM
+#include <WiFiMulti.h>
+#include <WiFi.h>
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyBtaKEQdxWfDPhFi1DSlDkWWfpGFjDSqDE"
@@ -21,44 +24,73 @@
 
 // Define Firebase Data object
 FirebaseData fbdo;
+
 FirebaseAuth auth;
 FirebaseConfig config;
-
+bool signupOK = false;
 // dht
 DHT dht(23, DHT22);
 WiFiMulti wifiMulti;
 
+// Init wifiInit();
 
-
+int ledValue = 32;
+int motor1pin1 = 26;
+int motor1pin2 = 25;
+int enable1Pin = 5;
 unsigned long sendDataPrevMillis = 0;
 int count1 = 0;
 int count2 = 0;
 int intValue;
 String stringValue;
 float floatValue;
-bool signupOK = false;
+
 int solenoide = 23;
 float temperatura;
 float umidade;
+int rele = 22;
+
+const int freq = 30000;
+const int pwmChannel = 0;
+const int resolution = 8;
+int dutyCycle = 200;
 
 void initWifi()
 {
   /*
-  Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED)
+   *Serial.print("Connecting to Wi-Fi");
+   *while (WiFi.status() != WL_CONNECTED)
+   *{
+   *  Serial.print(".");
+   *  delay(300);
+   *}
+   **/
+  Serial.println("Esperando conexão...");
+  if (wifiMulti.run() == WL_CONNECTED)
   {
-    Serial.print(".");
-    delay(300);
+    Serial.println(WiFi.SSID());
   }
-  */
- if(wifiMulti.run() == WL_CONNECTED) {
-        Serial.println(WiFi.SSID());
-    }
   Serial.println();
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
   Serial.println();
 }
+
+// Função de inicialização do rele
+void initRele(int value)
+{
+  if (value == 1)
+  {
+    digitalWrite(rele, HIGH);
+    Serial.println("Rele ligado");
+  }
+  else
+  {
+    digitalWrite(rele, LOW);
+    Serial.println("Rele desligado");
+  }
+}
+
 void initFirebase()
 {
 
@@ -67,7 +99,7 @@ void initFirebase()
 
   /* Assign the RTDB URL (required) */
   config.database_url = DATABASE_URL;
-
+  Firebase.reconnectWiFi(true);
   /* Sign up */
   if (Firebase.signUp(&config, &auth, "", ""))
   {
@@ -84,85 +116,119 @@ void initFirebase()
 
   Firebase.begin(&config, &auth);
 }
-void setDataFirebase()
-{/*
-    float temperatura;
 
-    float umidade;
-  */
-  // Write an Int number on the database path test/int
-  // dht
-  if (Firebase.RTDB.setString(&fbdo, "sensores/dht/temperatura", temperatura) && Firebase.RTDB.setString(&fbdo, "sensores/dht/humidade", umidade))
+// Função set do firebase
+void setFunction(String sensorName, String sensorValue)
+{
+  if (Firebase.RTDB.setString(&fbdo, "sensores/" + sensorName, sensorName))
   {
-    
-    if (dht.readTemperature() > 0 && dht.readHumidity() > 0)
+    sensorName = sensorValue;
+    Serial.println(sensorName);
+    Serial.println("Informação enviada");
+    Serial.println("PATH: " + fbdo.dataPath());
+    Serial.println("TYPE: " + fbdo.dataType());
+
+    Serial.println(sensorName + ": " + sensorValue);
+  }
+}
+
+int getFunction(String path, String name)
+{
+  if (Firebase.RTDB.getInt(&fbdo, "/" + path))
+  {
+    if (fbdo.dataType() == "int")
     {
-      temperatura = dht.readTemperature();
-      umidade = dht.readHumidity();
-      Serial.println(temperatura);
-      Serial.println("PASSED");
-      Serial.println("PATH: " + fbdo.dataPath());
-      Serial.println("TYPE: " + fbdo.dataType());
+      Serial.println("Dados recebidos do " + name);
+      int value = fbdo.intData();
+      return value;
     }
     else
     {
-      stringValue = "Esperando informações do DHT...";
-      Serial.println(stringValue);
-
+      Serial.println(name + " ERROR " + fbdo.errorReason());
     }
+  };
+  return 0;
+}
+
+void setDataFirebase()
+{
+  if (dht.readTemperature() > 0 && dht.readHumidity() > 0)
+  {
+    String temperature = String(dht.readTemperature());
+    String humidity = String(dht.readHumidity());
+    setFunction("temperatura", temperature);
+    setFunction("umidade", humidity);
   }
   else
   {
-    Serial.println("FAILED DHT");
-    Serial.println("REASON: " + fbdo.errorReason());
+    stringValue = "Esperando informações do DHT...";
+    Serial.println(stringValue);
   }
+}
 
-  /*
-    if (Firebase.RTDB.setFloat(&fbdo, "motores/motor/1", temperatura)) {
+void motor(int power)
+{
+  // Move the DC motor forward at maximum speed
+  if (power == 1)
+  {
 
-    }
-    else {
-      Serial.println("FAILED DHT");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-    */
+    digitalWrite(motor1pin1, LOW);
+    digitalWrite(motor1pin2, HIGH);
+  }
+  else
+  {
+    digitalWrite(motor1pin1, LOW);
+    digitalWrite(motor1pin2, LOW);
+  }
+}
+void led(int ledV)
+{
+  // Move the DC motor forward at maximum speed
+  if (ledV == 1)
+  {
+
+    digitalWrite(ledValue, LOW);
+  }
+  else
+  {
+    digitalWrite(ledValue, LOW);
+  }
 }
 
 void getDataFirebase()
 {
-  if (Firebase.RTDB.getInt(&fbdo, "/teste/led/ledValue"))
-  {
-    if (fbdo.dataType() == "int")
-    {
-      intValue = fbdo.intData();
-
-      if (intValue == 1)
-      {
-        Serial.println(intValue);
-        digitalWrite(2, HIGH);
-      }
-      else
-      {
-        digitalWrite(2, LOW);
-      }
-    }
-    else
-    {
-      Serial.println(fbdo.errorReason());
-    }
-  }
+  initRele(getFunction("/motores/solenoide/1", "solenoide"));
+  /*
   if (Firebase.RTDB.getInt(&fbdo, "/motores/solenoide/1"))
   {
     if (fbdo.dataType() == "int")
     {
       intValue = fbdo.intData();
-      Serial.println(intValue);
+      initRele(intValue);
     }
     else
     {
       Serial.println("TESTE" + fbdo.errorReason());
     }
   }
+  */
+  // led(getFunction("/teste/led/", "ledValue"));
+  motor(getFunction("/motores/motor/1/power", "motor 1"));
+  /*
+  if (Firebase.RTDB.getString(&fbdo, "/motores/motor1/power"))
+  {
+    if (fbdo.dataType() == "string")
+    {
+      stringValue = fbdo.stringData();
+      motor(stringValue);
+      Serial.println("motor " + stringValue);
+    }
+    else
+    {
+      Serial.println("TESTE" + fbdo.errorReason());
+    }
+  }
+  */
 }
 
 void setup()
@@ -171,14 +237,24 @@ void setup()
   wifiMulti.addAP("FabLab Camtuc", "11223344");
   wifiMulti.addAP("BETEL", "universitario");
   wifiMulti.addAP("CASA", "23lafenix");
-
-  //WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  pinMode(solenoide, OUTPUT);
-  pinMode(2, OUTPUT);
   Serial.begin(9600);
-  dht.begin();
   initWifi();
   initFirebase();
+  dht.begin();
+  pinMode(motor1pin1, OUTPUT);
+  pinMode(motor1pin2, OUTPUT);
+  pinMode(ledValue, OUTPUT);
+  pinMode(enable1Pin, OUTPUT);
+  pinMode(rele, OUTPUT);
+  // configure LED PWM functionalitites
+  ledcSetup(pwmChannel, freq, resolution);
+
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(enable1Pin, pwmChannel);
+
+  // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  pinMode(solenoide, OUTPUT);
+  pinMode(2, OUTPUT);
 }
 
 void loop()
