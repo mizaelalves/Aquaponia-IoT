@@ -81,12 +81,12 @@ void initRele(int value)
 {
   if (value == 1)
   {
-    digitalWrite(rele, HIGH);
+    digitalWrite(rele1, HIGH);
     Serial.println("Rele ligado");
   }
   else
   {
-    digitalWrite(rele, LOW);
+    digitalWrite(rele1, LOW);
     Serial.println("Rele desligado");
   }
 }
@@ -261,7 +261,7 @@ void setup()
   pinMode(motor1pin2, OUTPUT);
   pinMode(ledValue, OUTPUT);
   pinMode(enable1Pin, OUTPUT);
-  pinMode(rele, OUTPUT);
+  pinMode(rele1, OUTPUT);
   pinMode(rele2, OUTPUT);
   // configure LED PWM functionalitites
   ledcSetup(pwmChannel, freq, resolution);
