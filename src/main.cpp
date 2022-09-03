@@ -45,11 +45,11 @@ int intValue;
 String stringValue;
 float floatValue;
 
-int solenoide = 23;
+
 float temperatura;
 float umidade;
-int rele = 22;
-
+int rele1 = 22;
+int rele2 = 19;
 const int freq = 30000;
 const int pwmChannel = 0;
 const int resolution = 8;
@@ -87,6 +87,19 @@ void initRele(int value)
   else
   {
     digitalWrite(rele, LOW);
+    Serial.println("Rele desligado");
+  }
+}
+void initRele2(int value)
+{
+  if (value == 1)
+  {
+    digitalWrite(rele2, HIGH);
+    Serial.println("Rele ligado");
+  }
+  else
+  {
+    digitalWrite(rele2, LOW);
     Serial.println("Rele desligado");
   }
 }
@@ -197,7 +210,10 @@ void led(int ledV)
 
 void getDataFirebase()
 {
-  initRele(getFunction("/motores/solenoide/1", "solenoide"));
+  //solenoide
+  initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"));
+  //motor
+  initRele2(getFunction("/atuadores/motores/motor1", "motor"));
   /*
   if (Firebase.RTDB.getInt(&fbdo, "/motores/solenoide/1"))
   {
@@ -246,6 +262,7 @@ void setup()
   pinMode(ledValue, OUTPUT);
   pinMode(enable1Pin, OUTPUT);
   pinMode(rele, OUTPUT);
+  pinMode(rele2, OUTPUT);
   // configure LED PWM functionalitites
   ledcSetup(pwmChannel, freq, resolution);
 
@@ -253,7 +270,7 @@ void setup()
   ledcAttachPin(enable1Pin, pwmChannel);
 
   // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  pinMode(solenoide, OUTPUT);
+
   pinMode(2, OUTPUT);
 }
 
