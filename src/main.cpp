@@ -133,7 +133,7 @@ void initFirebase()
 // Função set do firebase
 void setFunction(String sensorName, String sensorValue)
 {
-  if (Firebase.RTDB.setString(&fbdo, "sensores/" + sensorName, sensorName))
+  if (Firebase.RTDB.setString(&fbdo, "/" + sensorName, sensorValue))
   {
     sensorName = sensorValue;
     Serial.println(sensorName);
@@ -211,9 +211,12 @@ void led(int ledV)
 void getDataFirebase()
 {
   //solenoide
-  initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"));
+  //initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"));
   //motor
-  initRele2(getFunction("/atuadores/motores/motor1", "motor"));
+  //initRele2(getFunction("/atuadores/motor/motor1", "motor"));
+  //setFunction("atuadores/motor/motor1", "1");
+
+  
   /*
   if (Firebase.RTDB.getInt(&fbdo, "/motores/solenoide/1"))
   {
@@ -229,7 +232,7 @@ void getDataFirebase()
   }
   */
   // led(getFunction("/teste/led/", "ledValue"));
-  motor(getFunction("/motores/motor/1/power", "motor 1"));
+  //motor(getFunction("/motores/motor/1/power", "motor 1"));
   /*
   if (Firebase.RTDB.getString(&fbdo, "/motores/motor1/power"))
   {
@@ -250,7 +253,7 @@ void getDataFirebase()
 void setup()
 {
   wifiMulti.addAP("Redmi", "fenix2332");
-  wifiMulti.addAP("FabLab Camtuc", "11223344");
+  wifiMulti.addAP("FabLab", "fablabmaker");
   wifiMulti.addAP("BETEL", "universitario");
   wifiMulti.addAP("CASA", "23lafenix");
   Serial.begin(9600);
