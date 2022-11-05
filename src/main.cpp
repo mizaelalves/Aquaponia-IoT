@@ -6,9 +6,7 @@
 #include "DHT.h"
 
 #include <NTPClient.h>
-//#include <WiFi.h>
-//#include <WiFiMulti.h>
-//#include <initWiFi.h>
+
 // Provide the token generation process info.
 #include "addons/TokenHelper.h"
 // Provide the RTDB payload printing info and other helper functions.
@@ -24,7 +22,7 @@
 // Insert RTDB URLefine the RTDB URL
 #define DATABASE_URL "https://aquaponia-iot-default-rtdb.firebaseio.com/"
 #define USER_EMAIL "mizaelbna@hotmail.com"
-#define USER_PASSWORD "projetoaquaponia" 
+#define USER_PASSWORD "projetoaquaponia"
 // Define Firebase Data object
 FirebaseData fbdo;
 
@@ -64,37 +62,32 @@ int dutyCycle = 200;
 
 void initWifi()
 {
-  /*
-   *Serial.print("Connecting to Wi-Fi");
-   *while (WiFi.status() != WL_CONNECTED)
-   *{
-   *  Serial.print(".");
-   *  delay(300);
-   *}
-   **/
+
   Serial.println("Esperando conexão...");
-  if (wifiMulti.run() == WL_CONNECTED)
+  if (wifiMulti.run() != WL_CONNECTED)
   {
-    Serial.println(WiFi.SSID());
+    Serial.println("WiFi not connected!");
+    delay(1000);
   }
   Serial.println();
+  Serial.println(WiFi.SSID());
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
   Serial.println();
 }
 
 // Função de inicialização do rele
-void initRele(int value,String name)
+void initRele(int value, String name)
 {
   if (value == 1)
   {
     digitalWrite(rele1, HIGH);
-    Serial.println(name+" ligado");
+    Serial.println(name + " ligado");
   }
   else
   {
     digitalWrite(rele1, LOW);
-    Serial.println(name+" desligado");
+    Serial.println(name + " desligado");
   }
 }
 void initRele2(int value, String name)
@@ -102,12 +95,12 @@ void initRele2(int value, String name)
   if (value == 1)
   {
     digitalWrite(rele2, HIGH);
-    Serial.println(name+" ligado");
+    Serial.println(name + " ligado");
   }
   else
   {
     digitalWrite(rele2, LOW);
-    Serial.println(name+" desligado");
+    Serial.println(name + " desligado");
   }
 }
 
@@ -124,7 +117,7 @@ void initFirebase()
   auth.user.password = USER_PASSWORD;
   /* Sign up */
   /*
-  if (Firebase.signUp(&config, &auth, USER_EMAIL, USER_PASSWORD))
+    if (Firebase.signUp(&config, &auth, USER_EMAIL, USER_PASSWORD))
   {
     Serial.println("ok");
     signupOK = true;
@@ -134,19 +127,21 @@ void initFirebase()
     Serial.printf("%s\n", config.signer.signupError.message.c_str());
     Serial.println("Error");
   }
- */
-  //Firebase.reconnectWiFi(true);
+ 
+  */
+
+  // Firebase.reconnectWiFi(true);
   fbdo.setResponseSize(4096);
   /* Assign the callback function for the long running token generation task */
   config.token_status_callback = tokenStatusCallback; // see addons/TokenHelper.h
-  
+
   Firebase.begin(&config, &auth);
 }
 
 // Função set do firebase
 void setFunction(String sensorName, int sensorValue)
 {
-  if (Firebase.RTDB.setInt(&fbdo, "/" + sensorName, sensorValue))
+  if (Firebase.RTDB.setInt(&fbdo, sensorName, sensorValue))
   {
     sensorName = sensorValue;
     Serial.println(sensorName);
@@ -176,40 +171,70 @@ int getFunction(String path, String name)
   return 0;
 }
 
-void initRoutine(int value)
+String getStringFunction(String path, String name)
 {
-  //Serial.println(ntp.getHours());
-  //Serial.println(ntp.getMinutes());
-  if (value == 1)
+  if (Firebase.RTDB.getString(&fbdo, "/" + path))
   {
-    //String temperature = String(dht.readTemperature());
-    //String humidity = String(dht.readHumidity());
-    setFunction("atuadores/motor/motor1", 1);
-    setFunction("atuadores/solenoide/solenoide1", 1);
-    Serial.println("***Atenção***ROTINA INICIADA***");
-  }
-  else{
-    Serial.println("Esperando rotina!!!");
-  }
+    if (fbdo.dataType() == "String")
+    {
+      Serial.println("Dados recebidos do " + name);
+      String value = fbdo.stringData();
+      return value;
+    }
+    else
+    {
+      Serial.println(name + " ERROR " + fbdo.errorReason());
+    }
+  };
 }
 
-/*
-void setDataFirebase()
+void initRoutine()
 {
-  if (dht.readTemperature() > 0 && dht.readHumidity() > 0)
+
+  if (getFunction("/rotina/estado", "rotina") == 1)
   {
-    String temperature = String(dht.readTemperature());
-    String humidity = String(dht.readHumidity());
-    setFunction("temperatura", temperature);
-    setFunction("umidade", humidity);
+    Serial.println("***Atenção***ROTINA INICIADA***");
+    setFunction("atuadores/solenoide/solenoide1", 1);
+    // solenoide
+    initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
+    Serial.println("***Solenoide Ligada***");
+    
+    setFunction("atuadores/motor/motor1", 1);
+    // motor
+    initRele(getFunction("/atuadores/motor/motor1", "motor"), "motor");
+    Serial.println("***motor Ligada***");
+    
+    Serial.println("*******************************");
+    delay(18000);
+    setFunction("atuadores/solenoide/solenoide1", 0);
+    Serial.println("**Solenoide desligada**");
+
+    delay(5000);
+    Serial.println("Tempo de pausa 5s");
+    setFunction("atuadores/motor/motor1", 1);
+    Serial.println("***Motor Ligado***");
+    initRele2(getFunction("/atuadores/motor/motor1", "motor"), "motor");
+
+    delay(10000);
+    Serial.println("********************************");
+    setFunction("/rotina/estado", 0); // finaliza rotina
+    // solenoide
+
+    Serial.println("***Atenção***ROTINA Finalizada**");
+    setFunction("atuadores/motor/motor1", 0);
+    setFunction("atuadores/solenoide/solenoide1", 0);
+    Serial.println("*******************************");
+    initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
+    // motor
+    initRele2(getFunction("/atuadores/motor/motor1", "motor"), "motor");
   }
-  else
-  {
-    stringValue = "Esperando informações do DHT...";
-    Serial.println(stringValue);
-  }
+
+  /*
+
+
+  */
 }
-*/
+
 
 void motor(int power)
 {
@@ -243,52 +268,58 @@ void led(int ledV)
 void getDataFirebase()
 {
   // solenoide
-
   initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
-  // motor
   initRele2(getFunction("/atuadores/motor/motor1", "motor"), "motor");
-  //setFunction("atuadores/motor/motor1", "1");
-  //initRoutine(getFunction("/rotina", "rotina"));
-  /*
-  if (Firebase.RTDB.getInt(&fbdo, "/motores/solenoide/1"))
-  {
-    if (fbdo.dataType() == "int")
-    {
-      intValue = fbdo.intData();
-      initRele(intValue);
-    }
-    else
-    {
-      Serial.println("TESTE" + fbdo.errorReason());
-    }
-  }
-  */
-  // led(getFunction("/teste/led/", "ledValue"));
-  // motor(getFunction("/motores/motor/1/power", "motor 1"));
-  /*
-  if (Firebase.RTDB.getString(&fbdo, "/motores/motor1/power"))
-  {
-    if (fbdo.dataType() == "string")
-    {
-      stringValue = fbdo.stringData();
-      motor(stringValue);
-      Serial.println("motor " + stringValue);
-    }
-    else
-    {
-      Serial.println("TESTE" + fbdo.errorReason());
-    }
-  }
-  */
+  initRoutine();
+  //  setFunction("atuadores/motor/motor1", "1");
+  //  initRoutine(getFunction("/rotina", "rotina"));
+  
 }
 
-int convertInSeconds(int interval){
+int convertInSeconds()
+{
   int hourToSecond = ntp.getHours() * 60 * 60;
   int minutesToSecond = ntp.getMinutes() * 60;
-  int total = hourToSecond + minutesToSecond;
-  //Serial.println(hourToSecond);
-  return total;
+
+  // interval = interval *60;
+
+  int total_atual = hourToSecond + minutesToSecond;
+  // int total = total_atual + interval;
+
+  // Serial.println(hourToSecond);
+  return total_atual;
 }
+
+/*
+String convertInHourMinutes(int segundos) {
+    int h, m, s, resto;
+    h = segundos / 3600;
+    resto = segundos % 3600;
+    m = resto / 60;
+    s = resto % 60;
+
+    //return Serial.printf("%d:%d:%d\n", h, m, s);
+}
+*/
+
+/*
+void timeRoutine(){
+  String hora = String(ntp.getFormattedTime()).substring(0,5);
+
+  int inicio = getFunction("/rotina/inicio", "inicio");
+  String final = String(getStringFunction("/rotina/fim", "final"));
+  Serial.println("Atual "+hora);
+  Serial.println("Final "+final);
+  //while (hora != final)
+  //{
+    //Serial.println("iniciado");
+    //delay(1000);
+ // }
+  //Serial.println("terminou");
+
+    //initRoutine()
+}
+*/
 
 void setup()
 {
@@ -297,9 +328,23 @@ void setup()
   wifiMulti.addAP("BETEL", "universitario");
   wifiMulti.addAP("CASA", "23lafenix");
   wifiMulti.addAP("LABHARD", "ufpaLabHard");
+  wifiMulti.addAP("CleitonRastah", "@olhapedra");
   Serial.begin(9600);
-  initWifi();
-  
+  // initWifi();
+
+  Serial.println("Esperando conexão...");
+
+  if (wifiMulti.run() != WL_CONNECTED)
+  {
+    Serial.println("WiFi not connected!");
+    delay(100);
+  }
+  Serial.println();
+  Serial.println(WiFi.SSID());
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+
   initFirebase();
   dht.begin();
   ntp.begin();
@@ -319,26 +364,36 @@ void setup()
   // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   pinMode(2, OUTPUT);
+  Firebase.reconnectWiFi(true);
 }
 
-long previousMillis = 0;
+
 void loop()
 {
   ntp.update();
+
   if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 5000 || sendDataPrevMillis == 0))
   {
     sendDataPrevMillis = millis();
 
     // setDataFirebase();
-    Serial.println("--Projeto Aquaponia *Firebase*--");
-    getDataFirebase();
-    //if(getFunction("/rotina/estado", "solenoide") == 1){
-     // initRoutine(1);
-     sleep(20000);
-   // }
-    //currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
-    
-    convertInSeconds();
+    //Serial.println("--Projeto Aquaponia *Firebase*--");
+    //getDataFirebase();
+    Serial.println("5s");
+    // currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
+
+    // convertInHourMinutes(convertInSeconds(0));
+  }
+    if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 000 || sendDataPrevMillis == 0))
+  {
+    sendDataPrevMillis = millis();
+
+    // setDataFirebase();
+    //Serial.println("--Projeto Aquaponia *Firebase*--");
+    //getDataFirebase();
+    Serial.println("2s");
+    // currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
+
+    // convertInHourMinutes(convertInSeconds(0));
   }
 }
-
