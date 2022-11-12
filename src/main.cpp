@@ -17,12 +17,13 @@
 #include <WiFi.h>
 
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyBtaKEQdxWfDPhFi1DSlDkWWfpGFjDSqDE"
+#define API_KEY "EiSp9oawAE06bAtBOs8IveKTYePgyjB629neTX2b"
 
 // Insert RTDB URLefine the RTDB URL
-#define DATABASE_URL "https://aquaponia-iot-default-rtdb.firebaseio.com/"
-#define USER_EMAIL "mizaelbna@hotmail.com"
-#define USER_PASSWORD "projetoaquaponia"
+#define DATABASE_URL "https://aquaponia-iot-37008-default-rtdb.firebaseio.com/"
+
+#define USER_EMAIL "projetoaquaponia.fablab@gmail.com"
+#define USER_PASSWORD "firebaseesp32"
 // Define Firebase Data object
 FirebaseData fbdo;
 
