@@ -79,7 +79,7 @@ void initWifi()
 // Função de inicialização do rele
 void initRele(int value, String name)
 {
-  if (value == 1)
+  if (value == true)
   {
     digitalWrite(rele1, HIGH);
     Serial.println(name + " ligado");
@@ -92,7 +92,7 @@ void initRele(int value, String name)
 }
 void initRele2(int value, String name)
 {
-  if (value == 1)
+  if (value == true)
   {
     digitalWrite(rele2, HIGH);
     Serial.println(name + " ligado");
@@ -127,7 +127,7 @@ void initFirebase()
     Serial.printf("%s\n", config.signer.signupError.message.c_str());
     Serial.println("Error");
   }
- 
+
   */
 
   // Firebase.reconnectWiFi(true);
@@ -153,21 +153,23 @@ void setFunction(String sensorName, int sensorValue)
   }
 }
 
-int getFunction(String path, String name)
+bool getFunction(String path, String name)
 {
-  if (Firebase.RTDB.getInt(&fbdo, "/" + path))
+  if (Firebase.RTDB.getBool(&fbdo, "/" + path))
   {
-    if (fbdo.dataType() == "int")
+    if (fbdo.dataTypeEnum() == fb_esp_rtdb_data_type_boolean)
     {
+      Serial.println(fbdo.to<bool>());
       Serial.println("Dados recebidos do " + name);
-      int value = fbdo.intData();
+
+      bool value = fbdo.to<bool>();
       return value;
     }
-    else
-    {
-      Serial.println(name + " ERROR " + fbdo.errorReason());
-    }
-  };
+  }
+  else
+  {
+    Serial.println(name + " ERROR " + fbdo.errorReason());
+  }
   return 0;
 }
 
@@ -185,7 +187,8 @@ String getStringFunction(String path, String name)
     {
       Serial.println(name + " ERROR " + fbdo.errorReason());
     }
-  };
+  }
+  return "erro";
 }
 
 void initRoutine()
@@ -198,12 +201,12 @@ void initRoutine()
     // solenoide
     initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
     Serial.println("***Solenoide Ligada***");
-    
+
     setFunction("atuadores/motor/motor1", 1);
     // motor
     initRele(getFunction("/atuadores/motor/motor1", "motor"), "motor");
     Serial.println("***motor Ligada***");
-    
+
     Serial.println("*******************************");
     delay(18000);
     setFunction("atuadores/solenoide/solenoide1", 0);
@@ -234,7 +237,6 @@ void initRoutine()
 
   */
 }
-
 
 void motor(int power)
 {
@@ -273,7 +275,6 @@ void getDataFirebase()
   initRoutine();
   //  setFunction("atuadores/motor/motor1", "1");
   //  initRoutine(getFunction("/rotina", "rotina"));
-  
 }
 
 int convertInSeconds()
@@ -367,7 +368,6 @@ void setup()
   Firebase.reconnectWiFi(true);
 }
 
-
 void loop()
 {
   ntp.update();
@@ -376,24 +376,25 @@ void loop()
   {
     sendDataPrevMillis = millis();
 
-    // setDataFirebase();
-    //Serial.println("--Projeto Aquaponia *Firebase*--");
-    //getDataFirebase();
-    Serial.println("5s");
+    //setDataFirebase();
+    Serial.println("--Projeto Aquaponia *Firebase*--");
+    getDataFirebase();
+    //Serial.println("5s");
     // currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
 
     // convertInHourMinutes(convertInSeconds(0));
   }
-    if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 000 || sendDataPrevMillis == 0))
+  /*
+  if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 000 || sendDataPrevMillis == 0))
   {
     sendDataPrevMillis = millis();
 
     // setDataFirebase();
-    //Serial.println("--Projeto Aquaponia *Firebase*--");
-    //getDataFirebase();
+    // Serial.println("--Projeto Aquaponia *Firebase*--");
+    // getDataFirebase();
     Serial.println("2s");
     // currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
 
     // convertInHourMinutes(convertInSeconds(0));
-  }
+  }*/
 }
