@@ -4,7 +4,7 @@
 #endif
 #include <Firebase_ESP_Client.h>
 #include "DHT.h"
-
+#include "SECRET.h"
 #include <NTPClient.h>
 
 // Provide the token generation process info.
@@ -16,13 +16,7 @@
 #include <WiFiMulti.h>
 #include <WiFi.h>
 
-// Insert Firebase project API Key
-#define API_KEY "AIzaSyBtaKEQdxWfDPhFi1DSlDkWWfpGFjDSqDE"
 
-// Insert RTDB URLefine the RTDB URL
-#define DATABASE_URL "https://aquaponia-iot-default-rtdb.firebaseio.com/"
-#define USER_EMAIL "mizaelbna@hotmail.com"
-#define USER_PASSWORD "projetoaquaponia"
 // Define Firebase Data object
 FirebaseData fbdo;
 
@@ -323,15 +317,11 @@ void timeRoutine(){
 
 void setup()
 {
-  wifiMulti.addAP("Redmi", "fenix2332");
-  wifiMulti.addAP("FabLab", "fablabmaker");
-  wifiMulti.addAP("BETEL", "universitario");
-  wifiMulti.addAP("CASA", "23lafenix");
-  wifiMulti.addAP("LABHARD", "ufpaLabHard");
-  wifiMulti.addAP("CleitonRastah", "@olhapedra");
+  wifiMulti.addAP(WIFI_SSID1, WIFI_KEY1);
+  wifiMulti.addAP(WIFI_SSID2, WIFI_KEY2);
+
   Serial.begin(9600);
   // initWifi();
-
   Serial.println("Esperando conexão...");
 
   if (wifiMulti.run() != WL_CONNECTED)
