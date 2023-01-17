@@ -71,7 +71,7 @@ void initWifi()
 }
 
 // Função de inicialização do rele
-void initRele(int value, String name)
+void initRele(float value, String name)
 {
   if (value == true)
   {
@@ -84,7 +84,7 @@ void initRele(int value, String name)
     Serial.println(name + " desligado");
   }
 }
-void initRele2(int value, String name)
+void initRele2(float value, String name)
 {
   if (value == true)
   {
