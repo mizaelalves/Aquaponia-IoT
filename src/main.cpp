@@ -1,11 +1,17 @@
-
 #include <Arduino.h>
 #if defined(ESP32)
 #endif
 #include <Firebase_ESP_Client.h>
-#include "DHT.h"
 #include "SECRET.h"
 #include <NTPClient.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+unsigned long ultima_atualizacao = 0;             // Armazena o tempo da última atualização
+const unsigned long intervalo_atualizacao = 5000; // Intervalo de atualização em milissegundos (5 segundos)
+
+static bool estadoRegaPlantas = false;
 
 // Provide the token generation process info.
 #include "addons/TokenHelper.h"
@@ -16,375 +22,497 @@
 #include <WiFiMulti.h>
 #include <WiFi.h>
 
+#include <Servo.h> // Include the servo library
+Servo myservo;     // create servo object to control our servo
 
+// ----------------- ATUADORES E SENSORES ------------------
+// Componentes do Aquario
+int motorServo = 32;
+int sensorPH = 33;
+int nivelBaixoAquario = 12; // Sensor nivel baixo
+int nivelAltoAquario = 13;  // Sensor nivel alto
+int valvulaAquario = 23;    // valvula que enche o aquario
+int bombaAquario = 22;      // bomba que envia agua para a tubulacao
+
+float temp = 10.0;
+
+// Variaveis de estado Aquario
+bool estadoBombaAquario = false;
+bool estadoValvulaAquario = false;
+bool estadoSNAAquario = false;
+bool estadoSNBAquario = false;
+
+// Variaveis ph
+float valorPH;
+int amostras = 20;
+int from_ad = 0;
+float adcResolucao = 4095.0;
+
+// Componentes da Tubulacao
+int valvulaDescarte = 21;   // Descarta agua suja
+int valvulaHidroponia = 19; // Permite que a agua va para as plantas
+// Variaveis de estado Tubulacao
+bool estadoValvulaDescarte = false;
+bool estadoValvulaHidroponia = false;
+
+// Componentes da Cisterna
+int nivelBaixoCisterna = 35; // Sensor nivel baixo
+int nivelAltoCisterna = 34;  // Sensor nivel alto
+int bombaCisterna = 18;      // Manda agua para o decompositor
+// Variaveis de estado bombaBox
+bool estadoBombaCisterna = false;
+bool estadoSensorNivelBaixoCisterna = false;
+bool estadoSensorNivelAltoCisterna = false;
+
+// variaveis para o metodo regarPlantas()
+// variaveis para o metodo reabastecerAquario()
+// const long tempoRegaLigado = 180000;    // Intervalo em milissegundos para ligar o LED (3min)
+// const long tempoRegaDesligado = 900000; // Intervalo em milissegundos para desligar o LED (15min)
+const int tempoMinInicioRega = 3;
+const int tempoMinDesligaRega = 15;
+
+const long tempoRegaLigado = 240000;            //(tempoMinInicioRega * 60) * 1000;   // Intervalo em milissegundos para ligar o LED (10s)
+const long tempoRegaDesligado = 2400000;        //(tempoMinDesligaRega * 60) * 1000; // Intervalo em milissegundos para desligar o LED (10s)
+unsigned long anterirTarefaReabastecimento = 0; // Variável para armazenar o tempo anterior
+// bool valveOn = false;                           // Estado da válvula (Ligado/Desligado)
+
+bool statusEnvioRega = false;
+
+// ------------- FIM DOS ATUADORES E SENSORES -------------------
 // Define Firebase Data object
 FirebaseData fbdo;
-
 FirebaseAuth auth;
 FirebaseConfig config;
 bool signupOK = true;
-// dht
-DHT dht(23, DHT22);
 WiFiMulti wifiMulti;
 
 // Init wifiInit();
-
-int ledValue = 32;
-int motor1pin1 = 26;
-int motor1pin2 = 25;
-int enable1Pin = 5;
 unsigned long sendDataPrevMillis = 0;
-int count1 = 0;
-int count2 = 0;
-int intValue;
-String stringValue;
-float floatValue;
-int hora;
-int minutos;
-WiFiUDP ntpUDP;
-NTPClient ntp(ntpUDP);
+WiFiUDP udp;
+NTPClient ntp(udp, "a.st1.ntp.br", -3 * 3600, 60000); /* Cria um objeto "NTP" com as configurações.utilizada no Brasil */
+String hora;
+
+String horaInicioRotina;
+String horaFimRotina;
 
 String currentTime;
-float temperatura;
-float umidade;
-int rele1 = 22;
-int rele2 = 19;
-const int freq = 30000;
-const int pwmChannel = 0;
-const int resolution = 8;
-int dutyCycle = 200;
 
+unsigned long enviaDadosPHMillisAnterior = 0;
+
+// Inicia conexao wifi
 void initWifi()
 {
-
-  Serial.println("Esperando conexão...");
-  if (wifiMulti.run() != WL_CONNECTED)
+  Serial.print("Conectando ao WiFi...");
+  lcd.setCursor(0, 0);
+  lcd.print("Conectando ao WiFi:");
+  WiFi.begin(SSID, KEY);
+  int tentativas = 0;
+  while (WiFi.status() != WL_CONNECTED and tentativas <= 10)
   {
-    Serial.println("WiFi not connected!");
-    delay(1000);
+
+    delay(1000); // aguarda 500ms antes de tentar novamente
+    lcd.setCursor(0, 1);
+    lcd.print("Aguarde...");
+    Serial.print(".");
+    tentativas += 1;
   }
-  Serial.println();
-  Serial.println(WiFi.SSID());
-  Serial.print("Connected with IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.println();
-}
 
-// Função de inicialização do rele
-void initRele(float value, String name)
-{
-  if (value == true)
+  if (WiFi.status() == WL_CONNECTED)
   {
-    digitalWrite(rele1, HIGH);
-    Serial.println(name + " ligado");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Conexao OK!");
+    lcd.setCursor(0, 1);
+    lcd.print("Endereço IP: ");
+    lcd.setCursor(0, 2);
+    lcd.print(WiFi.localIP());
+    Serial.println("Conexão estabelecida!");
+    Serial.print("Endereço IP: ");
+    Serial.println(WiFi.localIP());
+    delay(2000);
   }
   else
   {
-    digitalWrite(rele1, LOW);
-    Serial.println(name + " desligado");
-  }
-}
-void initRele2(float value, String name)
-{
-  if (value == true)
-  {
-    digitalWrite(rele2, HIGH);
-    Serial.println(name + " ligado");
-  }
-  else
-  {
-    digitalWrite(rele2, LOW);
-    Serial.println(name + " desligado");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Falha na conexão.");
+    Serial.println("Falha na conexão. Timeout atingido.");
+    delay(2000);
   }
 }
 
 void initFirebase()
 {
-
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Conectando Firebase...");
   /* Assign the api key (required) */
   config.api_key = API_KEY;
   String base_path = "/UsersData/";
   /* Assign the RTDB URL (required) */
+
+  config.timeout.wifiReconnect = 10 * 1000;
   config.database_url = DATABASE_URL;
-  Firebase.reconnectWiFi(true);
+
+  Firebase.reconnectWiFi(false);
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
-  /* Sign up */
-  /*
-    if (Firebase.signUp(&config, &auth, USER_EMAIL, USER_PASSWORD))
-  {
-    Serial.println("ok");
-    signupOK = true;
-  }
-  else
-  {
-    Serial.printf("%s\n", config.signer.signupError.message.c_str());
-    Serial.println("Error");
-  }
-
-  */
 
   // Firebase.reconnectWiFi(true);
   fbdo.setResponseSize(4096);
   /* Assign the callback function for the long running token generation task */
   config.token_status_callback = tokenStatusCallback; // see addons/TokenHelper.h
-
   Firebase.begin(&config, &auth);
-}
-
-// Função set do firebase
-void setFunction(String sensorName, int sensorValue)
-{
-  if (Firebase.RTDB.setInt(&fbdo, sensorName, sensorValue))
+  if (Firebase.ready())
   {
-    sensorName = sensorValue;
-    Serial.println(sensorName);
-    Serial.println("Informação enviada");
-    Serial.println("PATH: " + fbdo.dataPath());
-    Serial.println("TYPE: " + fbdo.dataType());
-
-    Serial.println(sensorName + ": " + sensorValue);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Firebase ON :)");
   }
+  delay(1000);
 }
 
-bool getFunction(String path, String name)
+void reabastecerAquario()
 {
-  if (Firebase.RTDB.getBool(&fbdo, "/" + path))
-  {
-    if (fbdo.dataTypeEnum() == fb_esp_rtdb_data_type_boolean)
+  // 1 = nao detectou
+  // 0 = detectou
+  if (digitalRead(nivelBaixoAquario) == 1 and digitalRead(nivelAltoAquario) == 1)
+  {                                     // Se nao detectar agua
+    digitalWrite(valvulaAquario, HIGH); // liga valvula para reabastecer aquario
+    estadoValvulaAquario = true;
+    estadoSNAAquario = false;
+    estadoSNBAquario = false;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
     {
-      Serial.println(fbdo.to<bool>());
-      Serial.println("Dados recebidos do " + name);
-
-      bool value = fbdo.to<bool>();
-      return value;
+      Serial.printf("Define sensor nivel baixo... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/sensorNivelBaixoAquario"), estadoSNBAquario) ? "sensor baixo aquario ok" : fbdo.errorReason().c_str());
+      Serial.printf("Define sensor nivel alto... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/sensorNivelAltoAquario"), estadoSNAAquario) ? "sensor alto aquario ok" : fbdo.errorReason().c_str());
     }
   }
-  else
-  {
-    Serial.println(name + " ERROR " + fbdo.errorReason());
+  else if (digitalRead(nivelBaixoAquario) == 0 and digitalRead(nivelAltoAquario) == 0)
+  { // se detectar agua
+    digitalWrite(valvulaAquario, LOW);
+    estadoValvulaAquario = false;
+    estadoSNAAquario = true;
+    estadoSNBAquario = true;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      Serial.printf("Define sensor nivel baixo... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/sensorNivelBaixoAquario"), estadoSNBAquario) ? "sensor baixo aquario ok" : fbdo.errorReason().c_str());
+      Serial.printf("Define sensor nivel alto... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/sensorNivelAltoAquario"), estadoSNAAquario) ? "sensor alto aquario ok" : fbdo.errorReason().c_str());
+    }
   }
-  return 0;
+  else if (digitalRead(nivelBaixoAquario) == 0 and digitalRead(nivelAltoAquario) == 1)
+  {
+    estadoSNAAquario = false;
+    estadoSNBAquario = true;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      Serial.printf("Define sensor nivel baixo... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/sensorNivelBaixoAquario"), estadoSNBAquario) ? "sensor baixo aquario ok" : fbdo.errorReason().c_str());
+      Serial.printf("Define sensor nivel alto... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/sensorNivelAltoAquario"), estadoSNAAquario) ? "sensor alto aquario ok" : fbdo.errorReason().c_str());
+    }
+  }
 }
 
-String getStringFunction(String path, String name)
+// OBS: sensor nivel baixo invertido
+void encherDecantador()
 {
-  if (Firebase.RTDB.getString(&fbdo, "/" + path))
+  if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
   {
-    if (fbdo.dataType() == "String")
+    if (digitalRead(nivelBaixoCisterna) == 0)
     {
-      Serial.println("Dados recebidos do " + name);
-      String value = fbdo.stringData();
-      return value;
+      estadoSensorNivelBaixoCisterna = true;
+      Serial.printf("Definindo nivel baixo cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelBaixoCisterna"), estadoSensorNivelBaixoCisterna) ? "sensor baixo cisterna ok" : fbdo.errorReason().c_str());
+    }
+  }
+  if (digitalRead(nivelAltoCisterna) == 1 and digitalRead(nivelBaixoCisterna) == 0 and !estadoBombaCisterna)
+  {                                    // Se sensor nivel alto detectar agua
+    digitalWrite(bombaCisterna, HIGH); // liga a bomba
+    estadoBombaCisterna = true;
+    estadoSensorNivelAltoCisterna = true;
+    estadoSensorNivelBaixoCisterna = true;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      Serial.printf("Definindo nivel alto cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelAltoCisterna"), estadoSensorNivelAltoCisterna) ? "sensor alto cisterna ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo nivel baixo cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelBaixoCisterna"), estadoSensorNivelBaixoCisterna) ? "sensor baixo cisterna ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo bomba cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/bombaCisterna"), estadoBombaCisterna) ? "bomba cisterna ok" : fbdo.errorReason().c_str());
+    }
+  }
+  if (digitalRead(nivelAltoCisterna) == 0 and digitalRead(nivelBaixoCisterna) == 0 and estadoBombaCisterna)
+  { // se o nivel da agua for no meio dos sensores
+    digitalWrite(bombaCisterna, HIGH);
+    estadoBombaCisterna = true;
+    estadoSensorNivelAltoCisterna = false;
+    estadoSensorNivelBaixoCisterna = true;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      Serial.printf("Definindo nivel alto cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelAltoCisterna"), estadoSensorNivelAltoCisterna) ? "sensor alto cisterna ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo nivel baixo cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelBaixoCisterna"), estadoSensorNivelBaixoCisterna) ? "sensor baixo cisterna ok" : fbdo.errorReason().c_str());
+    }
+  }
+  if (digitalRead(nivelAltoCisterna) == 0 and digitalRead(nivelBaixoCisterna) == 1 and estadoBombaCisterna)
+  { // Se nao tiver agua na box
+    digitalWrite(bombaCisterna, LOW);
+    estadoBombaCisterna = false;
+    estadoSensorNivelAltoCisterna = false;
+    estadoSensorNivelBaixoCisterna = false;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      Serial.printf("Definindo bomba cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/bombaCisterna"), estadoBombaCisterna) ? "bomba cisterna ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo nivel alto cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelAltoCisterna"), estadoSensorNivelAltoCisterna) ? "sensor alto cisterna ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo nivel baixo cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelBaixoCisterna"), estadoSensorNivelBaixoCisterna) ? "sensor baixo cisterna ok" : fbdo.errorReason().c_str());
+    }
+  }
+}
+
+void regarPlantas()
+{
+  static unsigned long startMillis = 0; // Obtém o tempo atual em milissegundos
+
+  if (estadoRegaPlantas == false && estadoSNBAquario && millis() - startMillis >= tempoRegaDesligado || estadoRegaPlantas == false && startMillis == 0 && estadoSNBAquario)
+  {
+    estadoRegaPlantas = true;
+    startMillis = millis();
+
+    Serial.println();
+    Serial.println("*** Iniciando Rotina *****");
+    digitalWrite(valvulaDescarte, LOW);
+    digitalWrite(valvulaHidroponia, HIGH);
+    digitalWrite(bombaAquario, LOW);
+
+    estadoValvulaDescarte = false;
+    estadoValvulaHidroponia = true;
+    estadoBombaAquario = true;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      hora = ntp.getFormattedTime();
+      horaInicioRotina = hora;
+
+      Serial.printf("Iniciando rotina... %s\n", Firebase.RTDB.setBool(&fbdo, F("RotinaRegaPlantas/valor"), true) ? "rotina iniciada" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo horario ultima rotina... %s\n", Firebase.RTDB.setString(&fbdo, F("RotinaRegaPlantas/ultimaRotinaHora"), horaInicioRotina) ? "horario enviado" : fbdo.errorReason().c_str());
+
+      Serial.printf("Definindo estado da valvula de descarte... %s\n", Firebase.RTDB.setBool(&fbdo, F("Tubulacao/valvulaDescarte"), estadoValvulaDescarte) ? "valvula descarte ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo estado da valvula de hidroponia... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/valvulaHidroponia"), estadoValvulaHidroponia) ? "valvula hidroponia ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo estado da bomba do aquario...... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/bombaAquario"), estadoBombaAquario) ? "bomba aquario ok" : fbdo.errorReason().c_str());
+    }
+    Serial.println("rega ligou");
+    Serial.println();
+  }
+  else if (estadoRegaPlantas == true && millis() - startMillis >= tempoRegaLigado)
+  {
+    estadoRegaPlantas = false;
+    startMillis = millis();
+
+    Serial.println("*** Desligando Rotina *****");
+
+    digitalWrite(valvulaHidroponia, LOW);
+    digitalWrite(bombaAquario, HIGH);
+    estadoValvulaHidroponia = false;
+    estadoBombaAquario = false;
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      hora = ntp.getFormattedTime();
+      horaFimRotina = hora;
+      Serial.printf("Definindo horario ultima rotina... %s\n", Firebase.RTDB.setString(&fbdo, F("RotinaRegaPlantas/fimRotinaHora"), horaFimRotina) ? "horario enviado" : fbdo.errorReason().c_str());
+
+      Serial.printf("Deslingando rotina... %s\n", Firebase.RTDB.setBool(&fbdo, F("RotinaRegaPlantas/valor"), false) ? "rotina desligada" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo estado da valvula de hidroponia... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/valvulaHidroponia"), false) ? "valvula hidroponia ok" : fbdo.errorReason().c_str());
+      Serial.printf("Definindo estado da bomba do aquario...... %s\n", Firebase.RTDB.setBool(&fbdo, F("Aquario/bombaAquario"), false) ? "bomba aquario ok" : fbdo.errorReason().c_str());
+    }
+
+    Serial.println("*** Rotina Desligada *****");
+    Serial.println();
+  }
+}
+
+float ph(float voltagem)
+{
+  return 7 + ((2.5 - voltagem) / 0.18);
+}
+
+void verificaPH()
+{
+  static unsigned long iniciaTarefaPH = 0;
+  if (millis() - iniciaTarefaPH > 60000 || iniciaTarefaPH == 0)
+  {
+    int medicoes = 0;
+
+    for (int i = 0; i < amostras; i++)
+    {
+      from_ad = analogRead(sensorPH);
+      medicoes += from_ad;
+      delay(1);
+      // Serial.println(analogRead(from_ad));
+    }
+    float voltagem = 3.3 / adcResolucao * medicoes / amostras;
+    Serial.print("pH: ");
+    Serial.println(ph(voltagem));
+    valorPH = ph(voltagem);
+
+    if (valorPH >= 8.0 || valorPH <= 6.4)
+    {
+      digitalWrite(valvulaDescarte, HIGH);
+      digitalWrite(valvulaHidroponia, LOW);
+      digitalWrite(bombaAquario, LOW);
+      Serial.println("Descarte iniciado");
+    }
+    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
+    {
+      Serial.printf("Enviando o PH... %s\n", Firebase.RTDB.setFloat(&fbdo, F("Aquario/ph"), valorPH) ? "PH eviado" : fbdo.errorReason().c_str());
+    }
+  }
+}
+
+unsigned long startTime = 0;
+bool alimentacao7hOn = false;
+bool alimentacao17hOn = false;
+
+const unsigned long rotationTime = 5000; // Tempo de rotação em milissegundos
+bool isServoOn = false;
+
+void alimentacao()
+{
+  ntp.update();
+  int currentHour = ntp.getHours();
+  int currentMinute = ntp.getMinutes();
+
+  if (currentHour == 20 && currentMinute == 35 && !alimentacao7hOn)
+  {
+    Serial.println(currentHour);
+    Serial.println(currentMinute);
+    alimentacao7hOn = true;
+    alimentacao17hOn = false;
+
+    if (!isServoOn)
+    {
+      startTime = millis();
+      myservo.write(180); // Posição para girar o servo (exemplo: 90 graus)
+      Serial.println("Alimentou");
+      Serial.printf("Alimentou... %s\n", Firebase.RTDB.setBool(&fbdo, F("/aliementacao/alimentacao09"), true) ? "ok" : fbdo.errorReason().c_str());
+      Serial.printf("Alimentou... %s\n", Firebase.RTDB.setBool(&fbdo, F("/aliementacao/alimentacao17"), false) ? "ok" : fbdo.errorReason().c_str());
+
+      isServoOn = true;
+    }
+  }
+
+  if (currentHour == 20 && currentMinute == 36 && !alimentacao17hOn)
+  {
+    alimentacao7hOn = false;
+    alimentacao17hOn = true;
+
+    if (!isServoOn)
+    {
+      startTime = millis();
+      myservo.write(180); // Posição para girar o servo (exemplo: 90 graus)
+      Serial.println("Alimentou");
+      Serial.printf("Alimentou... %s\n", Firebase.RTDB.setBool(&fbdo, F("/aliementacao/alimentacao07"), false) ? "ok" : fbdo.errorReason().c_str());
+      Serial.printf("Alimentou... %s\n", Firebase.RTDB.setBool(&fbdo, F("/aliementacao/alimentacao17"), true) ? "ok" : fbdo.errorReason().c_str());
+      isServoOn = true;
+    }
+  }
+
+  if (millis() - startTime >= rotationTime && isServoOn)
+  {
+    myservo.write(0); // Desligar o servo (posição 0 graus)
+    Serial.println("Desligou");
+    isServoOn = false;
+  }
+}
+
+void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCisterna, bool bombaAquario, bool sensorNivelBaixoCisterna, bool sensorNivelAltoCisterna, bool sensorNivelBaixoAquario, bool sensorNivelAltoAquario)
+{
+  // Verificar se já passaram 5 segundos desde a última atualização
+  if (millis() - ultima_atualizacao >= intervalo_atualizacao || ultima_atualizacao == 0)
+  {
+    ultima_atualizacao = millis(); // Atualizar o tempo da última atualização
+
+    lcd.clear(); // Limpar o display
+
+    // Exibir as informações de pH e temperatura
+    // lcd.setCursor(0, 0);
+    // lcd.printf("pH: %.f", ph);
+    // lcd.setCursor(0, 1);
+    // lcd.printf("Temp: %.f", temperatura);
+
+    // Verificar se a rotina está iniciada
+    if (rotina_iniciada)
+    {
+      lcd.setCursor(0, 0);
+      lcd.print("Rotina: Iniciada");
     }
     else
     {
-      Serial.println(name + " ERROR " + fbdo.errorReason());
+      lcd.setCursor(0, 0);
+      lcd.print("Rotina: Parada");
     }
-  }
-  return "erro";
-}
 
-void initRoutine()
-{
+    // Exibir o status dos atuadores
+    lcd.setCursor(0, 1);
+    lcd.print("B_A: ");
+    lcd.print(bombaAquario ? "ON" : "OFF");
 
-  if (getFunction("/rotina/estado", "rotina") == 1)
-  {
-    Serial.println("***Atenção***ROTINA INICIADA***");
-    setFunction("atuadores/solenoide/solenoide1", 1);
-    // solenoide
-    initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
-    Serial.println("***Solenoide Ligada***");
+    lcd.setCursor(9, 1);
+    lcd.print("B_C: ");
+    lcd.print(bombaCisterna ? "ON" : "OFF");
 
-    setFunction("atuadores/motor/motor1", 1);
-    // motor
-    initRele(getFunction("/atuadores/motor/motor1", "motor"), "motor");
-    Serial.println("***motor Ligada***");
+    lcd.setCursor(0, 2);
+    lcd.print("Nivel Cisterna:");
+    lcd.print(sensorNivelAltoCisterna ? "Alto" : (sensorNivelBaixoCisterna ? "Medio" : "Baixo"));
 
-    Serial.println("*******************************");
-    delay(18000);
-    setFunction("atuadores/solenoide/solenoide1", 0);
-    Serial.println("**Solenoide desligada**");
-
-    delay(5000);
-    Serial.println("Tempo de pausa 5s");
-    setFunction("atuadores/motor/motor1", 1);
-    Serial.println("***Motor Ligado***");
-    initRele2(getFunction("/atuadores/motor/motor1", "motor"), "motor");
-
-    delay(10000);
-    Serial.println("********************************");
-    setFunction("/rotina/estado", 0); // finaliza rotina
-    // solenoide
-
-    Serial.println("***Atenção***ROTINA Finalizada**");
-    setFunction("atuadores/motor/motor1", 0);
-    setFunction("atuadores/solenoide/solenoide1", 0);
-    Serial.println("*******************************");
-    initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
-    // motor
-    initRele2(getFunction("/atuadores/motor/motor1", "motor"), "motor");
-  }
-
-  /*
-
-
-  */
-}
-
-void motor(int power)
-{
-  // Move the DC motor forward at maximum speed
-  if (power == 1)
-  {
-
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, HIGH);
-  }
-  else
-  {
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, LOW);
+    lcd.setCursor(0, 3);
+    lcd.print("Nivel Aquario:");
+    lcd.print(sensorNivelAltoAquario ? "Alto" : (sensorNivelBaixoAquario ? "Medio" : "Baixo"));
   }
 }
-void led(int ledV)
-{
-  // Move the DC motor forward at maximum speed
-  if (ledV == 1)
-  {
-
-    digitalWrite(ledValue, LOW);
-  }
-  else
-  {
-    digitalWrite(ledValue, LOW);
-  }
-}
-
-void getDataFirebase()
-{
-  // solenoide
-  initRele(getFunction("/atuadores/solenoide/solenoide1", "solenoide"), "solenoide");
-  initRele2(getFunction("/atuadores/motor/motor1", "motor"), "motor");
-  initRoutine();
-  //  setFunction("atuadores/motor/motor1", "1");
-  //  initRoutine(getFunction("/rotina", "rotina"));
-}
-
-int convertInSeconds()
-{
-  int hourToSecond = ntp.getHours() * 60 * 60;
-  int minutesToSecond = ntp.getMinutes() * 60;
-
-  // interval = interval *60;
-
-  int total_atual = hourToSecond + minutesToSecond;
-  // int total = total_atual + interval;
-
-  // Serial.println(hourToSecond);
-  return total_atual;
-}
-
-/*
-String convertInHourMinutes(int segundos) {
-    int h, m, s, resto;
-    h = segundos / 3600;
-    resto = segundos % 3600;
-    m = resto / 60;
-    s = resto % 60;
-
-    //return Serial.printf("%d:%d:%d\n", h, m, s);
-}
-*/
-
-/*
-void timeRoutine(){
-  String hora = String(ntp.getFormattedTime()).substring(0,5);
-
-  int inicio = getFunction("/rotina/inicio", "inicio");
-  String final = String(getStringFunction("/rotina/fim", "final"));
-  Serial.println("Atual "+hora);
-  Serial.println("Final "+final);
-  //while (hora != final)
-  //{
-    //Serial.println("iniciado");
-    //delay(1000);
- // }
-  //Serial.println("terminou");
-
-    //initRoutine()
-}
-*/
 
 void setup()
 {
-  wifiMulti.addAP(WIFI_SSID1, WIFI_KEY1);
-  wifiMulti.addAP(WIFI_SSID2, WIFI_KEY2);
 
   Serial.begin(9600);
-  // initWifi();
-  Serial.println("Esperando conexão...");
+  lcd.init();
+  lcd.backlight();
+  Serial.println("Desligando atuadores...");
+  digitalWrite(bombaCisterna, LOW);
+  digitalWrite(valvulaDescarte, LOW);
+  digitalWrite(valvulaHidroponia, LOW);
+  digitalWrite(valvulaAquario, LOW);
+  digitalWrite(bombaAquario, HIGH);
+  Serial.println("Deligado");
+  // Aquario
+  pinMode(nivelAltoAquario, INPUT_PULLUP);
+  pinMode(nivelBaixoAquario, INPUT_PULLUP);
+  pinMode(valvulaAquario, OUTPUT);
+  pinMode(bombaAquario, OUTPUT);
+  // tubulacao
+  pinMode(valvulaDescarte, OUTPUT);
+  pinMode(valvulaHidroponia, OUTPUT);
+  // boxWatter
+  pinMode(nivelBaixoCisterna, INPUT);
+  pinMode(nivelAltoCisterna, INPUT);
+  pinMode(bombaCisterna, OUTPUT);
 
-  if (wifiMulti.run() != WL_CONNECTED)
+  delay(500);
+  myservo.attach(motorServo);
+  initWifi();
+  if (WiFi.status() == WL_CONNECTED)
   {
-    Serial.println("WiFi not connected!");
-    delay(100);
+    initFirebase();
   }
-  Serial.println();
-  Serial.println(WiFi.SSID());
-  Serial.print("Connected with IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.println();
-
-  initFirebase();
-  dht.begin();
   ntp.begin();
-  ntp.setTimeOffset(-10800);
-  pinMode(motor1pin1, OUTPUT);
-  pinMode(motor1pin2, OUTPUT);
-  pinMode(ledValue, OUTPUT);
-  pinMode(enable1Pin, OUTPUT);
-  pinMode(rele1, OUTPUT);
-  pinMode(rele2, OUTPUT);
-  // configure LED PWM functionalitites
-  ledcSetup(pwmChannel, freq, resolution);
-
-  // attach the channel to the GPIO to be controlled
-  ledcAttachPin(enable1Pin, pwmChannel);
-
-  // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  pinMode(2, OUTPUT);
-  Firebase.reconnectWiFi(true);
+  ntp.forceUpdate(); /* Atualização */
 }
 
 void loop()
 {
+  mostrarLCD(valorPH, temp, estadoRegaPlantas, estadoBombaCisterna, estadoBombaAquario, estadoSensorNivelBaixoCisterna, estadoSensorNivelAltoCisterna, estadoSNBAquario, estadoSNAAquario);
+  static unsigned long iniciaVerificacao = 0;
   ntp.update();
-
-  if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 5000 || sendDataPrevMillis == 0))
+  alimentacao();
+  regarPlantas();
+  if (millis() - iniciaVerificacao >= 1000)
   {
-    sendDataPrevMillis = millis();
-
-    //setDataFirebase();
-    Serial.println("--Projeto Aquaponia *Firebase*--");
-    getDataFirebase();
-    //Serial.println("5s");
-    // currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
-
-    // convertInHourMinutes(convertInSeconds(0));
+    iniciaVerificacao = millis();
+    Serial.println("Inicia");
+    encherDecantador();
+    reabastecerAquario();
+    verificaPH();
   }
-  /*
-  if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 000 || sendDataPrevMillis == 0))
-  {
-    sendDataPrevMillis = millis();
-
-    // setDataFirebase();
-    // Serial.println("--Projeto Aquaponia *Firebase*--");
-    // getDataFirebase();
-    Serial.println("2s");
-    // currentTime = ntp.getHours()+":"+ntp.getMinutes()+":"+ntp.getSeconds();
-
-    // convertInHourMinutes(convertInSeconds(0));
-  }*/
 }
