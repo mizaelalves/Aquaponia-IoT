@@ -9,7 +9,7 @@
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 unsigned long ultima_atualizacao = 0;             // Armazena o tempo da última atualização
-const unsigned long intervalo_atualizacao = 5000; // Intervalo de atualização em milissegundos (5 segundos)
+const unsigned long intervalo_atualizacao = 1000; // Intervalo de atualização em milissegundos (5 segundos)
 
 static bool estadoRegaPlantas = false;
 
@@ -29,10 +29,12 @@ Servo myservo;     // create servo object to control our servo
 // Componentes do Aquario
 int motorServo = 32;
 int sensorPH = 33;
-int nivelBaixoAquario = 12; // Sensor nivel baixo
-int nivelAltoAquario = 13;  // Sensor nivel alto
-int valvulaAquario = 23;    // valvula que enche o aquario
-int bombaAquario = 22;      // bomba que envia agua para a tubulacao
+//  sensores
+int nivelBaixoAquario = 15; // Sensor nivel baixo
+int nivelAltoAquario = 2;  // Sensor nivel alto
+//  atuadores
+int valvulaAquario = 13;    // valvula que enche o aquario
+int bombaAquario = 12;      // bomba que envia agua para a tubulacao
 
 float temp = 10.0;
 
@@ -49,16 +51,16 @@ int from_ad = 0;
 float adcResolucao = 4095.0;
 
 // Componentes da Tubulacao
-int valvulaDescarte = 21;   // Descarta agua suja
-int valvulaHidroponia = 19; // Permite que a agua va para as plantas
+int valvulaDescarte = 14;   // Descarta agua suja
+int valvulaHidroponia = 27; // Permite que a agua va para as plantas
 // Variaveis de estado Tubulacao
 bool estadoValvulaDescarte = false;
 bool estadoValvulaHidroponia = false;
 
 // Componentes da Cisterna
-int nivelBaixoCisterna = 35; // Sensor nivel baixo
-int nivelAltoCisterna = 34;  // Sensor nivel alto
-int bombaCisterna = 18;      // Manda agua para o decompositor
+int nivelBaixoCisterna = 19; // Sensor nivel baixo
+int nivelAltoCisterna = 18;  // Sensor nivel alto
+int bombaCisterna = 26;      // Manda agua para o decompositor
 // Variaveis de estado bombaBox
 bool estadoBombaCisterna = false;
 bool estadoSensorNivelBaixoCisterna = false;
@@ -145,7 +147,7 @@ void initFirebase()
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Conectando Firebase...");
+  lcd.print("Conectando Firebase");
   /* Assign the api key (required) */
   config.api_key = API_KEY;
   String base_path = "/UsersData/";
@@ -267,16 +269,20 @@ void regarPlantas()
 {
   static unsigned long startMillis = 0; // Obtém o tempo atual em milissegundos
 
-  if (estadoRegaPlantas == false && estadoSNBAquario && millis() - startMillis >= tempoRegaDesligado || estadoRegaPlantas == false && startMillis == 0 && estadoSNBAquario)
+  if (estadoRegaPlantas == false  && millis() - startMillis >= tempoRegaDesligado || estadoRegaPlantas == false && startMillis == 0 )
   {
     estadoRegaPlantas = true;
     startMillis = millis();
 
     Serial.println();
     Serial.println("*** Iniciando Rotina *****");
+    if (digitalRead(nivelBaixoAquario) == 0){
+    digitalWrite(bombaAquario, HIGH);
+    }
+    digitalWrite(bombaAquario, LOW);
     digitalWrite(valvulaDescarte, LOW);
     digitalWrite(valvulaHidroponia, HIGH);
-    digitalWrite(bombaAquario, LOW);
+
 
     estadoValvulaDescarte = false;
     estadoValvulaHidroponia = true;
@@ -417,16 +423,14 @@ void alimentacao()
   }
 }
 
-void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCisterna, bool bombaAquario, bool sensorNivelBaixoCisterna, bool sensorNivelAltoCisterna, bool sensorNivelBaixoAquario, bool sensorNivelAltoAquario)
+void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCisterna, bool bombaAquario, int sensorNivelBaixoCisterna, int sensorNivelAltoCisterna, int sensorNivelBaixoAquario, int sensorNivelAltoAquario)
 {
   // Verificar se já passaram 5 segundos desde a última atualização
   if (millis() - ultima_atualizacao >= intervalo_atualizacao || ultima_atualizacao == 0)
   {
     ultima_atualizacao = millis(); // Atualizar o tempo da última atualização
 
-    lcd.clear(); // Limpar o display
-
-    // Exibir as informações de pH e temperatura
+        // Exibir as informações de pH e temperatura
     // lcd.setCursor(0, 0);
     // lcd.printf("pH: %.f", ph);
     // lcd.setCursor(0, 1);
@@ -455,11 +459,13 @@ void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCis
 
     lcd.setCursor(0, 2);
     lcd.print("Nivel Cisterna:");
-    lcd.print(sensorNivelAltoCisterna ? "Alto" : (sensorNivelBaixoCisterna ? "Medio" : "Baixo"));
+        Serial.printf("*********** sensor nivel baixo : %d\n", sensorNivelBaixoCisterna);
+    lcd.print(sensorNivelAltoCisterna == 1 ? "Alto" : (sensorNivelBaixoCisterna == 0 ? "Medio" : "Baixo"));
 
     lcd.setCursor(0, 3);
     lcd.print("Nivel Aquario:");
-    lcd.print(sensorNivelAltoAquario ? "Alto" : (sensorNivelBaixoAquario ? "Medio" : "Baixo"));
+
+    lcd.print(sensorNivelAltoAquario == 1 ? "Alto" : (sensorNivelBaixoAquario == 1 ? "Medio" : "Baixo"));
   }
 }
 
@@ -502,7 +508,7 @@ void setup()
 
 void loop()
 {
-  mostrarLCD(valorPH, temp, estadoRegaPlantas, estadoBombaCisterna, estadoBombaAquario, estadoSensorNivelBaixoCisterna, estadoSensorNivelAltoCisterna, estadoSNBAquario, estadoSNAAquario);
+  mostrarLCD(valorPH, temp, estadoRegaPlantas, estadoBombaCisterna, estadoBombaAquario, digitalRead(nivelBaixoCisterna), digitalRead(nivelAltoCisterna), digitalRead(nivelBaixoAquario), digitalRead(nivelBaixoAquario));
   static unsigned long iniciaVerificacao = 0;
   ntp.update();
   alimentacao();
