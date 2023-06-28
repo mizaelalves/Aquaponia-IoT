@@ -46,7 +46,7 @@ bool estadoSNBAquario = false;
 
 // pH variaveis
 const int analogInPin = 34; 
-int sensorValue = 0; 
+int sensorValor = 0; 
 unsigned long int avgValue; 
 float b;
 int buf[10],temp;
@@ -360,10 +360,10 @@ void verificaPH()
   Serial.print("v = ");
   Serial.println(pHVol);
 
-  float phValue = -5.70 * pHVol + 21.34;    
+  float phValor = -5.70 * pHVol + 21.34;    
   //float phValue = 7 + ((2.5 - pHVol) / 0.18);
   Serial.print("Ph=");
-  Serial.println(phValue);
+  Serial.println(phValor);
 
   delay(10000);
 }
