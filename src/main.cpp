@@ -44,7 +44,7 @@ bool estadoValvulaAquario = false;
 bool estadoSNAAquario = false;
 bool estadoSNBAquario = false;
 
-// pH variables
+// pH variaveis
 const int analogInPin = 34; 
 int sensorValue = 0; 
 unsigned long int avgValue; 
@@ -329,11 +329,6 @@ void regarPlantas()
     Serial.println("*** Rotina Desligada *****");
     Serial.println();
   }
-}
-
-float ph(float voltagem)
-{
-  return 7 + ((2.5 - voltagem) / 0.18);
 }
 
 void verificaPH()
