@@ -44,11 +44,13 @@ bool estadoValvulaAquario = false;
 bool estadoSNAAquario = false;
 bool estadoSNBAquario = false;
 
-// Variaveis ph
-float valorPH;
-int amostras = 20;
-int from_ad = 0;
-float adcResolucao = 4095.0;
+// pH variaveis
+const int analogInPin = 34; 
+int sensorValor = 0; 
+unsigned long int avgValue; 
+float b;
+int buf[10],temp;
+
 
 // Componentes da Tubulacao
 int valvulaDescarte = 14;   // Descarta agua suja
@@ -368,42 +370,41 @@ void regarPlantas()
   }
 }
 
-float ph(float voltagem)
-{
-  return 7 + ((2.5 - voltagem) / 0.18);
-}
-
 void verificaPH()
 {
-  static unsigned long iniciaTarefaPH = 0;
-  if (millis() - iniciaTarefaPH > 60000 || iniciaTarefaPH == 0)
-  {
-    int medicoes = 0;
-
-    for (int i = 0; i < amostras; i++)
+  for(int i=0;i<10;i++) 
+  { 
+    buf[i]=analogRead(analogInPin);
+    Serial.print("AD = ");
+    Serial.println(buf[i]);
+    delay(10);
+  }
+  for(int i=0;i<9;i++)
     {
-      from_ad = analogRead(sensorPH);
-      medicoes += from_ad;
-      delay(1);
-      // Serial.println(analogRead(from_ad));
-    }
-    float voltagem = 3.3 / adcResolucao * medicoes / amostras;
-    Serial.print("pH: ");
-    Serial.println(ph(voltagem));
-    valorPH = ph(voltagem);
-    /*
-    if (valorPH >= 8.0 || valorPH <= 6.4)
-    {
-      digitalWrite(valvulaDescarte, HIGH);
-      digitalWrite(valvulaHidroponia, LOW);
-      digitalWrite(bombaAquario, LOW);
-      Serial.println("Descarte iniciado");
-    }*/
-    if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
-    {
-      Serial.printf("Enviando o PH... %s\n", Firebase.RTDB.setFloat(&fbdo, F("Aquario/ph"), valorPH) ? "PH eviado" : fbdo.errorReason().c_str());
+    for(int j=i+1;j<10;j++)
+      {
+      if(buf[i]>buf[j])
+        {
+        temp=buf[i];
+        buf[i]=buf[j];
+        buf[j]=temp;
+      }
     }
   }
+  avgValue=0;
+  for(int i=2;i<8;i++)
+    avgValue+=buf[i];
+  //float pHVol=(float)avgValue*5.0/1024/6;
+  float pHVol=(float)avgValue/6*3.4469/4095;
+  Serial.print("v = ");
+  Serial.println(pHVol);
+
+  float phValor = -5.70 * pHVol + 21.34;    
+  //float phValue = 7 + ((2.5 - pHVol) / 0.18);
+  Serial.print("Ph=");
+  Serial.println(phValor);
+
+  delay(10000);
 }
 
 unsigned long startTime = 0;
