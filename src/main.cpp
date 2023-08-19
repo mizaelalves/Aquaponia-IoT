@@ -31,10 +31,10 @@ int motorServo = 32;
 int sensorPH = 33;
 //  sensores
 int nivelBaixoAquario = 15; // Sensor nivel baixo
-int nivelAltoAquario = 2;  // Sensor nivel alto
+int nivelAltoAquario = 2;   // Sensor nivel alto
 //  atuadores
-int valvulaAquario = 13;    // valvula que enche o aquario
-int bombaAquario = 12;      // bomba que envia agua para a tubulacao
+int valvulaAquario = 13; // valvula que enche o aquario
+int bombaAquario = 12;   // bomba que envia agua para a tubulacao
 
 float temp = 10.0;
 
@@ -56,6 +56,8 @@ int valvulaHidroponia = 27; // Permite que a agua va para as plantas
 // Variaveis de estado Tubulacao
 bool estadoValvulaDescarte = false;
 bool estadoValvulaHidroponia = false;
+
+bool rotina_iniciada = false;
 
 // Componentes da Cisterna
 int nivelBaixoCisterna = 19; // Sensor nivel baixo
@@ -100,6 +102,24 @@ String horaFimRotina;
 String currentTime;
 
 unsigned long enviaDadosPHMillisAnterior = 0;
+
+String base_path = "/data_esp1/";
+// Variable to save USER UID
+String uid;
+
+// Database main path (to be updated in setup with the user UID)
+String databasePath;
+// Database child nodes
+String tempPath = "/temperaturaAquario";
+String phPath = "/phAquario";
+
+String timePath = "/timestamp";
+// Parent Node (to be updated in every loop)
+String parentPath;
+int timestamp;
+// Timer variables (send new readings every three minutes)
+unsigned long sendDataFirebasePrevMillis = 0;
+unsigned long timerDelay = 180000;
 
 // Inicia conexao wifi
 void initWifi()
@@ -150,7 +170,7 @@ void initFirebase()
   lcd.print("Conectando Firebase");
   /* Assign the api key (required) */
   config.api_key = API_KEY;
-  String base_path = "/UsersData/";
+
   /* Assign the RTDB URL (required) */
 
   config.timeout.wifiReconnect = 10 * 1000;
@@ -165,12 +185,30 @@ void initFirebase()
   /* Assign the callback function for the long running token generation task */
   config.token_status_callback = tokenStatusCallback; // see addons/TokenHelper.h
   Firebase.begin(&config, &auth);
+  // Getting the user UID might take a few seconds
+  Serial.println("Getting User UID");
+  while ((auth.token.uid) == "")
+  {
+    Serial.print('.');
+    delay(1000);
+  }
+  // Print user UID
+  uid = auth.token.uid.c_str();
+  Serial.print("User UID: ");
+  Serial.println(uid);
+
+  // Update database path
+  databasePath = String(base_path + uid + "/readings");
+
   if (Firebase.ready())
   {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Firebase ON :)");
+    lcd.setCursor(0, 1);
+    lcd.print("uid: " + uid);
   }
+
   delay(1000);
 }
 
@@ -269,20 +307,21 @@ void regarPlantas()
 {
   static unsigned long startMillis = 0; // Obtém o tempo atual em milissegundos
 
-  if (estadoRegaPlantas == false  && millis() - startMillis >= tempoRegaDesligado || estadoRegaPlantas == false && startMillis == 0 )
+  if (estadoRegaPlantas == false && millis() - startMillis >= tempoRegaDesligado || estadoRegaPlantas == false && startMillis == 0)
   {
     estadoRegaPlantas = true;
     startMillis = millis();
 
     Serial.println();
     Serial.println("*** Iniciando Rotina *****");
-    if (digitalRead(nivelBaixoAquario) == 0){
-    digitalWrite(bombaAquario, HIGH);
+    rotina_iniciada = true;
+    if (digitalRead(nivelBaixoAquario) == 0)
+    {
+      digitalWrite(bombaAquario, HIGH);
     }
     digitalWrite(bombaAquario, LOW);
     digitalWrite(valvulaDescarte, LOW);
     digitalWrite(valvulaHidroponia, HIGH);
-
 
     estadoValvulaDescarte = false;
     estadoValvulaHidroponia = true;
@@ -352,14 +391,14 @@ void verificaPH()
     Serial.print("pH: ");
     Serial.println(ph(voltagem));
     valorPH = ph(voltagem);
-
+    /*
     if (valorPH >= 8.0 || valorPH <= 6.4)
     {
       digitalWrite(valvulaDescarte, HIGH);
       digitalWrite(valvulaHidroponia, LOW);
       digitalWrite(bombaAquario, LOW);
       Serial.println("Descarte iniciado");
-    }
+    }*/
     if (WiFi.status() == WL_CONNECTED and Firebase.ready() && signupOK)
     {
       Serial.printf("Enviando o PH... %s\n", Firebase.RTDB.setFloat(&fbdo, F("Aquario/ph"), valorPH) ? "PH eviado" : fbdo.errorReason().c_str());
@@ -423,14 +462,14 @@ void alimentacao()
   }
 }
 
-void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCisterna, bool bombaAquario, int sensorNivelBaixoCisterna, int sensorNivelAltoCisterna, int sensorNivelBaixoAquario, int sensorNivelAltoAquario)
+void mostrarLCD( int sensorNivelBaixoCisterna, int sensorNivelAltoCisterna, int sensorNivelBaixoAquario, int sensorNivelAltoAquario)
 {
   // Verificar se já passaram 5 segundos desde a última atualização
   if (millis() - ultima_atualizacao >= intervalo_atualizacao || ultima_atualizacao == 0)
   {
     ultima_atualizacao = millis(); // Atualizar o tempo da última atualização
 
-        // Exibir as informações de pH e temperatura
+    // Exibir as informações de pH e temperatura
     // lcd.setCursor(0, 0);
     // lcd.printf("pH: %.f", ph);
     // lcd.setCursor(0, 1);
@@ -459,7 +498,7 @@ void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCis
 
     lcd.setCursor(0, 2);
     lcd.print("Nivel Cisterna:");
-        Serial.printf("*********** sensor nivel baixo : %d\n", sensorNivelBaixoCisterna);
+    Serial.printf("*********** sensor nivel baixo : %d\n", sensorNivelBaixoCisterna);
     lcd.print(sensorNivelAltoCisterna == 1 ? "Alto" : (sensorNivelBaixoCisterna == 0 ? "Medio" : "Baixo"));
 
     lcd.setCursor(0, 3);
@@ -468,6 +507,8 @@ void mostrarLCD(float ph, float temperatura, bool rotina_iniciada, bool bombaCis
     lcd.print(sensorNivelAltoAquario == 1 ? "Alto" : (sensorNivelBaixoAquario == 1 ? "Medio" : "Baixo"));
   }
 }
+
+
 
 void setup()
 {
@@ -502,17 +543,24 @@ void setup()
   {
     initFirebase();
   }
-  ntp.begin();
-  ntp.forceUpdate(); /* Atualização */
+  //ntp.begin();
+  //ntp.forceUpdate(); /* Atualização */
 }
 
 void loop()
 {
-  mostrarLCD(valorPH, temp, estadoRegaPlantas, estadoBombaCisterna, estadoBombaAquario, digitalRead(nivelBaixoCisterna), digitalRead(nivelAltoCisterna), digitalRead(nivelBaixoAquario), digitalRead(nivelBaixoAquario));
+  while (!ntp.update())
+  {
+    ntp.forceUpdate();
+  }
+   Serial.println("inciado");
+  mostrarLCD(digitalRead(nivelBaixoCisterna), digitalRead(nivelAltoCisterna), digitalRead(nivelBaixoAquario), digitalRead(nivelAltoAquario));
   static unsigned long iniciaVerificacao = 0;
+ 
   ntp.update();
   alimentacao();
   regarPlantas();
+
   if (millis() - iniciaVerificacao >= 1000)
   {
     iniciaVerificacao = millis();
