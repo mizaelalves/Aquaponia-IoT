@@ -36,8 +36,6 @@ int nivelAltoAquario = 2;   // Sensor nivel alto
 int valvulaAquario = 13; // valvula que enche o aquario
 int bombaAquario = 12;   // bomba que envia agua para a tubulacao
 
-float temp = 10.0;
-
 // Variaveis de estado Aquario
 bool estadoBombaAquario = false;
 bool estadoValvulaAquario = false;
@@ -131,7 +129,7 @@ void initWifi()
   lcd.print("Conectando ao WiFi:");
   WiFi.begin(SSID, KEY);
   int tentativas = 0;
-  while (WiFi.status() != WL_CONNECTED and tentativas <= 10)
+  while (WiFi.status() != WL_CONNECTED and tentativas <= 30)
   {
 
     delay(1000); // aguarda 500ms antes de tentar novamente
@@ -159,7 +157,7 @@ void initWifi()
   {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("Falha na conexão.");
+    lcd.print("Falha na conexao.");
     Serial.println("Falha na conexão. Timeout atingido.");
     delay(2000);
   }
@@ -317,11 +315,11 @@ void regarPlantas()
     Serial.println();
     Serial.println("*** Iniciando Rotina *****");
     rotina_iniciada = true;
-    if (digitalRead(nivelBaixoAquario) == 0)
-    {
-      digitalWrite(bombaAquario, HIGH);
-    }
-    digitalWrite(bombaAquario, LOW);
+    //if (digitalRead(nivelBaixoAquario) == 0)
+    //{
+     // digitalWrite(bombaAquario, HIGH);
+    //}
+    digitalWrite(bombaAquario, HIGH);
     digitalWrite(valvulaDescarte, LOW);
     digitalWrite(valvulaHidroponia, HIGH);
 
@@ -517,6 +515,14 @@ void setup()
   Serial.begin(9600);
   lcd.init();
   lcd.backlight();
+   initWifi();
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    initFirebase();
+  }
+  //ntp.begin();
+  //ntp.forceUpdate(); /* Atualização */
+
   Serial.println("Desligando atuadores...");
   digitalWrite(bombaCisterna, LOW);
   digitalWrite(valvulaDescarte, LOW);
@@ -539,13 +545,7 @@ void setup()
 
   delay(500);
   myservo.attach(motorServo);
-  initWifi();
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    initFirebase();
-  }
-  //ntp.begin();
-  //ntp.forceUpdate(); /* Atualização */
+ 
 }
 
 void loop()
