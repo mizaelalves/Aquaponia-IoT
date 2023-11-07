@@ -22,8 +22,8 @@ static bool estadoRegaPlantas = false;
 #include <WiFiMulti.h>
 #include <WiFi.h>
 
-#include <Servo.h> // Include the servo library
-Servo myservo;     // create servo object to control our servo
+//#include <Servo.h> // Include the servo library
+//Servo myservo;     // create servo object to control our servo
 
 // ----------------- ATUADORES E SENSORES ------------------
 // Componentes do Aquario
@@ -406,12 +406,12 @@ void verificaPH()
 }
 
 unsigned long startTime = 0;
-bool alimentacao7hOn = false;
-bool alimentacao17hOn = false;
+//bool alimentacao7hOn = false;
+//bool alimentacao17hOn = false;
 
-const unsigned long rotationTime = 5000; // Tempo de rotação em milissegundos
-bool isServoOn = false;
-
+//const unsigned long rotationTime = 5000; // Tempo de rotação em milissegundos
+//bool isServoOn = false;
+/*
 void alimentacao()
 {
   ntp.update();
@@ -460,7 +460,7 @@ void alimentacao()
     isServoOn = false;
   }
 }
-
+*/
 void mostrarLCD( int sensorNivelBaixoCisterna, int sensorNivelAltoCisterna, int sensorNivelBaixoAquario, int sensorNivelAltoAquario)
 {
   // Verificar se já passaram 5 segundos desde a última atualização
@@ -544,7 +544,7 @@ void setup()
   pinMode(bombaCisterna, OUTPUT);
 
   delay(500);
-  myservo.attach(motorServo);
+  //myservo.attach(motorServo);
  
 }
 
@@ -559,7 +559,7 @@ void loop()
   static unsigned long iniciaVerificacao = 0;
  
   ntp.update();
-  alimentacao();
+  //alimentacao();
   regarPlantas();
 
   if (millis() - iniciaVerificacao >= 1000)
