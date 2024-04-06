@@ -71,8 +71,9 @@ bool estadoSensorNivelAltoCisterna = false;
 // const long tempoRegaDesligado = 900000; // Intervalo em milissegundos para desligar o LED (15min)
 //const int tempoMinInicioRega = 3;
 //const int tempoMinDesligaRega = 15;
-
-const long tempoRegaLigado = 30000;            //(tempoMinInicioRega * 60) * 1000;   // Intervalo em milissegundos para ligar o LED (10s)
+// 1 min = 60000 ms
+// 15 min = 900000 ms
+const long tempoRegaLigado = 15000;            //(tempoMinInicioRega * 60) * 1000;   // Intervalo em milissegundos para ligar o LED (10s)
 const long tempoRegaDesligado = 30000;        //(tempoMinDesligaRega * 60) * 1000; // Intervalo em milissegundos para desligar o LED (10s)
 unsigned long anterirTarefaReabastecimento = 0; // Variável para armazenar o tempo anterior
 // bool valveOn = false;                           // Estado da válvula (Ligado/Desligado)
@@ -126,13 +127,12 @@ void initWifi()
   lcd.print("Conectando ao WiFi:");
   WiFi.begin(SSID, KEY);
   int tentativas = 0;
-  while (WiFi.status() != WL_CONNECTED and tentativas <= 30)
+  while (WiFi.status() != WL_CONNECTED and tentativas <= 10)
   {
-
-    delay(1000); // aguarda 500ms antes de tentar novamente
+    delay(500); // aguarda 500ms antes de tentar novamente
     lcd.setCursor(0, 1);
-    lcd.print("Aguarde...");
-    Serial.print(".");
+    lcd.print("aguarde...");
+    Serial.println(".");
     tentativas += 1;
   }
 
@@ -145,10 +145,7 @@ void initWifi()
     lcd.print("Endereço IP: ");
     lcd.setCursor(0, 2);
     lcd.print(WiFi.localIP());
-    Serial.println("Conexão estabelecida!");
-    Serial.print("Endereço IP: ");
-    Serial.println(WiFi.localIP());
-    delay(2000);
+    delay(1000);
   }
   else
   {
@@ -270,7 +267,7 @@ void encherDecantador()
   Serial.println(digitalRead(nivelBaixoCisterna));
   Serial.print("nivel alto p/ cisterna=");
   Serial.println(digitalRead(nivelAltoCisterna));
-  if (digitalRead(nivelAltoCisterna) == 1 and digitalRead(nivelBaixoCisterna) == 1 and !estadoBombaCisterna)
+  if (digitalRead(nivelAltoCisterna) == 0 and digitalRead(nivelBaixoCisterna) == 0 and !estadoBombaCisterna)
   {                                    // Se sensor nivel alto detectar agua
     digitalWrite(bombaCisterna, HIGH); // liga a bomba
     Serial.println("Bomba Cisterna ligada");
@@ -284,7 +281,7 @@ void encherDecantador()
       Serial.printf("Definindo bomba cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/bombaCisterna"), estadoBombaCisterna) ? "bomba cisterna ok" : fbdo.errorReason().c_str());
     }
   }
-  else if (digitalRead(nivelAltoCisterna) == 0 and digitalRead(nivelBaixoCisterna) == 1 and estadoBombaCisterna)
+  else if (digitalRead(nivelAltoCisterna) == 1 and digitalRead(nivelBaixoCisterna) == 0 and estadoBombaCisterna)
   { // se o nivel da agua estiver abaixando e estiver no meio dos sensores 
     estadoSensorNivelAltoCisterna = false;
     estadoSensorNivelBaixoCisterna = true;
@@ -294,7 +291,7 @@ void encherDecantador()
       Serial.printf("Definindo nivel baixo cisterna... %s\n", Firebase.RTDB.setBool(&fbdo, F("Cisterna/sensorNivelBaixoCisterna"), estadoSensorNivelBaixoCisterna) ? "sensor baixo cisterna ok" : fbdo.errorReason().c_str());
     }
   }
-  else if (digitalRead(nivelAltoCisterna) == 0 and digitalRead(nivelBaixoCisterna) == 0 and estadoBombaCisterna)
+  else if (digitalRead(nivelAltoCisterna) == 1 and digitalRead(nivelBaixoCisterna) == 1 and estadoBombaCisterna)
   { // Se os sensores nao tiverem agua e a bomba estava ligada
     digitalWrite(bombaCisterna, LOW);
     Serial.println("Bomba Cisterna desligada");
@@ -492,7 +489,7 @@ void mostrarLCD(int sensorNivelBaixoCisterna, int sensorNivelAltoCisterna, int s
 
     // Verificar se a rotina está iniciada
     lcd.clear();
-    if (rotina_iniciada)
+    if (!rotina_iniciada)
     {
       lcd.setCursor(0, 0);
       lcd.print("Rotina: Iniciada");
@@ -516,7 +513,7 @@ void mostrarLCD(int sensorNivelBaixoCisterna, int sensorNivelAltoCisterna, int s
 
     lcd.setCursor(0, 2);
     lcd.print("Nivel Cisterna:");
-    lcd.print(sensorNivelAltoCisterna == 1 ? "Alto" : (sensorNivelBaixoCisterna == 1 ? "Medio" : "Baixo"));
+    lcd.print(sensorNivelAltoCisterna == 0 ? "Alto" : (sensorNivelBaixoCisterna == 0 ? "Medio" : "Baixo"));
 
     lcd.setCursor(0, 3);
     lcd.print("Nivel Aquario:");
@@ -559,10 +556,10 @@ void setup()
   digitalWrite(bombaAquario, HIGH); //bomba aquario desativa em HIGH
   //myservo.attach(motorServo);
   initWifi();
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    initFirebase();
-  } 
+  // if (WiFi.status() == WL_CONNECTED)
+  // {
+  //   initFirebase();
+  // } 
 }
 
 void loop()
